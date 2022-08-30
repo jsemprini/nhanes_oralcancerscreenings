@@ -1,0 +1,123 @@
+****preliminary summary statistics****
+clear all
+
+use "C:\Users\jsemprini\OneDrive - University of Iowa\3-Preliminary\7-NHANES\final\oo_final\data\2011-2018nhanes_toanalyze.dta"
+
+cd "C:\Users\jsemprini\OneDrive - University of Iowa\3-Preliminary\7-NHANES\final\oo_final\crude_results"
+
+
+set more off
+  quietly log
+  local logon = r(status)
+  if "`logon'" == "on" { 
+	log close 
+	}
+log using Semprini_NHANES_any, replace text
+
+
+global controls i.(age male hispanic white black nohs hsonly somecol married childless)
+
+gen ui=0 if insured==1
+replace ui=1 if insured==0
+
+global other_outcomes ui medicaid private medicare dentalvisit_1 hc_visit1 hc_lastyr routcare
+
+global p_outcomes examoc_t recentexam currentexam talkoc
+
+tab svywave examoc_t, missing
+
+tab hc_visit1, missing
+
+gen neweight=.
+replace neweight=4203/17347 if svywave==2011
+replace neweight=4461/17373 if svywave==2013
+replace neweight=4369/17347 if svywave==2015
+replace neweight=4314/17347 if svywave==2017
+
+gen nwt=wt*neweight
+gen wt4=wt/4
+
+foreach i in $outcomes{
+	
+	tab svywave `i', missing
+}
+
+
+
+***design***
+gen post=0
+replace post=1 if svywave>=2015
+
+gen treat=0
+replace treat=1 if age<64
+
+gen lowinc=0
+replace lowinc=1 if fpl_pct<2
+
+
+***regression***
+***DD***
+eststo clear 
+
+foreach i in $other_outcomes{
+    
+eststo:	reg `i' i.treat i.post i.treat#i.post $controls [pw=wt4] , vce(robust) 
+eststo:	reg `i' i.treat i.post i.treat#i.post $controls [pw=wt4] if lowinc==0, vce(robust) 
+
+eststo:	reg `i' i.treat i.post i.treat#i.post $controls [pw=wt4] if lowinc==1, vce(robust) 
+eststo:	reg `i' i.lowinc i.post i.lowinc#i.post $controls [pw=wt4] , vce(robust) 
+eststo:	reg `i' i.lowinc i.post i.lowinc#i.post $controls [pw=wt4] if treat==0, vce(robust) 
+
+eststo:	reg `i' i.lowinc i.post i.lowinc#i.post $controls [pw=wt4] if treat==1, vce(robust) 
+
+	
+}
+
+
+foreach i in $other_outcomes{
+    
+eststo:	reg `i' i.treat i.post i.treat#i.post i.lowinc i.lowinc#i.treat i.lowinc#i.post i.lowinc#i.treat#i.post $controls [pw=wt4], vce(robust) 
+
+
+	
+}
+
+
+esttab using otheroutcocmes.csv, replace keep(1.treat 1.post 1.treat#1.post 1.lowinc 1.lowinc#1.treat 1.lowinc#1.post 1.lowinc#1.treat#1.post)  b(3) se(3)
+
+estimates clear 
+
+foreach i in $p_outcomes{
+    
+eststo:	reg `i' i.treat i.post i.treat#i.post $controls [pw=nwt] , vce(robust) 
+eststo:	reg `i' i.treat i.post i.treat#i.post $controls [pw=nwt] if lowinc==0, vce(robust) 
+
+eststo:	reg `i' i.treat i.post i.treat#i.post $controls [pw=nwt] if lowinc==1, vce(robust) 
+eststo:	reg `i' i.lowinc i.post i.lowinc#i.post $controls [pw=nwt] , vce(robust) 
+eststo:	reg `i' i.lowinc i.post i.lowinc#i.post $controls [pw=nwt] if treat==0 , vce(robust) 
+
+eststo:	reg `i' i.lowinc i.post i.lowinc#i.post $controls [pw=nwt] if treat==1 , vce(robust) 
+
+	
+}
+
+
+
+
+foreach i in $p_outcomes{
+    
+eststo:	reg `i' i.treat i.post i.treat#i.post i.lowinc i.lowinc#i.treat i.lowinc#i.post i.lowinc#i.treat#i.post $controls [pw=nwt], vce(robust) 
+
+
+	
+}
+
+esttab using 3d_oo.csv, replace keep(1.treat 1.post 1.treat#1.post 1.lowinc 1.lowinc#1.treat 1.lowinc#1.post 1.lowinc#1.treat#1.post) sca(coef p1) b(3) se(3)
+
+
+
+
+
+
+
+
